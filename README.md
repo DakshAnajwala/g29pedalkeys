@@ -43,10 +43,33 @@ next to the executable.
 
 Held keys are released when you stop, untick a pedal, or close the app.
 
+## Nothing is detected
+
+The window now shows a live HID line at the bottom. Read it first.
+
+- **"No HID reports yet"** -- the wheel is not delivering raw input. Run
+  `g29diag.exe`, press each pedal and turn the wheel when it asks, then send
+  `g29diag.log`. It lists every HID device Windows can see, the axes each one
+  declares, and every axis that moves, so it separates "Windows cannot see the
+  wheel" from "the app is asking for the wrong axis".
+- **"HID: N reports ... "** with Detect still failing -- reports are arriving
+  but the pedal axis is not moving far enough. Press the pedal to the floor
+  during the four second window.
+
+Check these on the wheel itself:
+
+- The G29 has a mode switch. It must be in **PC** mode, not PS3/PS4.
+- The wheel calibrates on power-up by turning lock to lock. If it never did
+  that, it is not initialised and reports nothing useful.
+- Logitech G HUB or Logitech Gaming Software should be installed so the wheel
+  leaves compatibility mode.
+- Unplug and replug the USB, and plug it directly into the PC rather than a hub.
+
 ## How it works
 
-- Pedals are read with Raw Input (`RIDEV_INPUTSINK`), so reports keep arriving
-  while a game has focus. Reports are decoded with the HID parser
+- Pedals are read with Raw Input (`RIDEV_PAGEONLY | RIDEV_INPUTSINK`) across
+  every generic desktop usage, so reports keep arriving while a game has focus
+  and a wheel that claims an unexpected HID usage is still seen. Reports are decoded with the HID parser
   (`HidP_GetValueCaps` / `HidP_GetUsageValue`), not DirectInput.
 - Bindings are stored as `(usage page, usage, vendor id, product id)`, which is
   stable across reboots, unlike raw input device handles.
@@ -74,3 +97,4 @@ driver these anti-cheats scan for.
 | `src/pedals.cpp` | Raw Input registration and HID report decoding |
 | `src/emitter.cpp` | Key output backend and key naming |
 | `src/config.cpp` | INI load/save and axis normalization |
+| `src/diag.cpp` | Standalone console diagnostic (`g29diag.exe`) |

@@ -21,6 +21,7 @@
 
 #define ID_ARM     900
 #define ID_STATUS  901
+#define ID_DIAG    902
 #define HOTKEY_ARM 1
 
 #define TIMER_UI     1
@@ -52,7 +53,13 @@ static DWORD g_detectStart = 0;
 static DeviceId g_detectDevice = {0, 0};
 static std::vector<DetectAxis> g_detectAxes;
 
-static HWND g_arm = NULL, g_status = NULL;
+static HWND g_arm = NULL, g_status = NULL, g_diag = NULL;
+
+// Live evidence that reports are arriving at all, shown in the window. Without
+// it a silent device and a wrong axis binding look identical.
+static int      g_hidReports = 0;
+static int      g_lastAxisCount = 0;
+static DeviceId g_lastDevice = {0, 0};
 
 static void ReleaseAll();
 
@@ -84,6 +91,18 @@ static void RefreshRow(int row) {
 
     SendMessage(g_ui[row].track, TBM_SETPOS, TRUE, p.thresholdPct);
     SendMessage(g_ui[row].enable, BM_SETCHECK, p.enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+}
+
+static void RefreshDiag() {
+    if (!g_diag) return;
+    char buf[192];
+    if (g_hidReports == 0) {
+        strcpy(buf, "No HID reports yet. Wheel not delivering raw input -- run g29diag.exe.");
+    } else {
+        sprintf(buf, "HID: %d reports, %d axes, device %04X:%04X",
+                g_hidReports, g_lastAxisCount, g_lastDevice.vendorId, g_lastDevice.productId);
+    }
+    SetWindowTextA(g_diag, buf);
 }
 
 static void RefreshLive() {
@@ -198,7 +217,10 @@ static void FinishDetect() {
     }
 
     if (!best || bestRange < 16) {
-        SetStatus("Detect failed: no axis moved. Is the wheel plugged in and the pedal pressed?");
+        if (g_hidReports == 0)
+            SetStatus("Detect failed: no HID reports at all. Run g29diag.exe and send the log.");
+        else
+            SetStatus("Detect failed: reports arrive but no axis moved. Press the pedal fully.");
         return;
     }
 
@@ -232,6 +254,10 @@ static void OnRawInput(LPARAM lParam) {
     static std::vector<AxisSample> samples;
     DeviceId id;
     if (!g_reader.Parse(lParam, samples, id)) return;
+
+    ++g_hidReports;
+    g_lastAxisCount = (int)samples.size();
+    g_lastDevice = id;
 
     if (g_detectRow >= 0) {
         FeedDetect(samples, id);
@@ -288,7 +314,8 @@ static void BuildUi(HWND hwnd) {
 
     int bottom = 12 + PEDAL_COUNT * 72;
     g_arm    = MakeControl(hwnd, "BUTTON", "Start (Ctrl+Alt+P)", BS_PUSHBUTTON, 10, bottom, 140, 28, ID_ARM);
-    g_status = MakeControl(hwnd, "STATIC", "Stopped.", 0, 160, bottom + 6, 424, 36, ID_STATUS);
+    g_status = MakeControl(hwnd, "STATIC", "Stopped.", 0, 160, bottom + 6, 424, 32, ID_STATUS);
+    g_diag   = MakeControl(hwnd, "STATIC", "", 0, 10, bottom + 36, 574, 18, ID_DIAG);
 }
 
 // ------------------------------------------------------------------ messages
@@ -315,6 +342,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_TIMER:
             if (wParam == TIMER_UI) {
                 RefreshLive();
+                RefreshDiag();
                 if (g_detectRow >= 0 && GetTickCount() - g_detectStart > DETECT_MS)
                     FinishDetect();
             }
@@ -429,7 +457,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
     wc.lpszClassName = "G29PedalKeysWnd";
     if (!RegisterClassA(&wc)) return 1;
 
-    RECT rc = {0, 0, 600, 12 + PEDAL_COUNT * 72 + 52};
+    RECT rc = {0, 0, 600, 12 + PEDAL_COUNT * 72 + 62};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     AdjustWindowRect(&rc, style, FALSE);
 

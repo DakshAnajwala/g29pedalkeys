@@ -1,16 +1,15 @@
 #include "pedals.h"
 
 bool HidReader::Register(HWND hwnd) {
-    RAWINPUTDEVICE rid[2];
-    rid[0].usUsagePage = 0x01;
-    rid[0].usUsage     = 0x04;  // Joystick -- the G29 enumerates here
-    rid[0].dwFlags     = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
-    rid[0].hwndTarget  = hwnd;
-    rid[1].usUsagePage = 0x01;
-    rid[1].usUsage     = 0x05;  // Gamepad
-    rid[1].dwFlags     = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
-    rid[1].hwndTarget  = hwnd;
-    return RegisterRawInputDevices(rid, 2, sizeof(RAWINPUTDEVICE)) == TRUE;
+    // Every usage on the generic desktop page, not just joystick and gamepad:
+    // wheels do not agree on which usage they claim, and a wrong guess here
+    // means no reports at all. Reports that are not HID are dropped in Parse.
+    RAWINPUTDEVICE rid;
+    rid.usUsagePage = 0x01;
+    rid.usUsage     = 0;
+    rid.dwFlags     = RIDEV_PAGEONLY | RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
+    rid.hwndTarget  = hwnd;
+    return RegisterRawInputDevices(&rid, 1, sizeof(rid)) == TRUE;
 }
 
 void HidReader::Forget(HANDLE device) {
